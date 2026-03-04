@@ -1,0 +1,16 @@
+{
+	// General
+	"editor.formatOnSave": true,
+	"editor.codeActionsOnSave": {
+		"source.organizeImports": "never"
+	},
+	"files.eol": "\n",
+	// Rust analyzer
+	"rust-analyzer.checkOnSave": false,
+	// "rust-analyzer.check.command": "clippy",
+	"[rust]": {
+		"editor.defaultFormatter": "rust-lang.rust-analyzer"
+	},
+	// Formatting
+	"prettier.configPath": ".prettierrc.json"
+}
