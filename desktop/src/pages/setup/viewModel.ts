@@ -53,9 +53,9 @@ export function viewModel() {
 				const locale = await osExt.locale()
 				console.log(`[locale] Detected locale: ${locale}`)
 
-				if (locale?.endsWith('-IL')) {
+				if (locale?.endsWith('-IL') && 'hebrew' in config.modelUrls) {
 					console.log(`[model] Prioritizing Hebrew models`)
-					urls.unshift(...config.modelUrls.hebrew)
+					urls.unshift(...(config.modelUrls as Record<string, string[]>).hebrew)
 					setModelCompany('ivrit.ai')
 				}
 			}

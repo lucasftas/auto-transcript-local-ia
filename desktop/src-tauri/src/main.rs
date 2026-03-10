@@ -125,7 +125,7 @@ async fn main() -> Result<()> {
             cmd::watcher::stop_watch_folder,
             cmd::watcher::pause_watch_folder,
             cmd::watcher::resume_watch_folder,
-            cmd::watcher::scan_folder_mp3s
+            cmd::watcher::scan_folder_videos
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -12,10 +12,13 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Mp3DetectedPayload {
+pub struct VideoDetectedPayload {
     pub watch_id: String,
     pub path: String,
+    pub size: u64,
 }
+
+const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mov", "m4v"];
 
 pub struct WatcherHandle {
     pub stopped: Arc<AtomicBool>,
@@ -101,11 +104,14 @@ pub async fn start_watch_folder(
                         EventKind::Create(_)
                         | EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
                             for path in event.paths {
-                                let is_mp3 = path
+                                let is_video = path
                                     .extension()
-                                    .map(|e| e.to_ascii_lowercase() == "mp3")
+                                    .map(|e| {
+                                        let ext = e.to_ascii_lowercase();
+                                        VIDEO_EXTENSIONS.iter().any(|v| ext == *v)
+                                    })
                                     .unwrap_or(false);
-                                if is_mp3 {
+                                if is_video {
                                     let path_str = path.to_string_lossy().to_string();
                                     if !seen.contains(&path_str) {
                                         seen.insert(path_str.clone());
@@ -134,12 +140,14 @@ pub async fn start_watch_folder(
                 break;
             }
             wait_file_stable(Path::new(&path)).await;
-            tracing::info!("MP3 detected: {}", path);
+            let file_size = std::fs::metadata(Path::new(&path)).map(|m| m.len()).unwrap_or(0);
+            tracing::info!("Video detected: {} ({}B)", path, file_size);
             let _ = app_handle.emit(
-                "mp3_detected",
-                Mp3DetectedPayload {
+                "video_detected",
+                VideoDetectedPayload {
                     watch_id: watch_id_inner.clone(),
                     path,
+                    size: file_size,
                 },
             );
         }
@@ -195,15 +203,16 @@ pub async fn resume_watch_folder(
 }
 
 #[tauri::command]
-pub async fn scan_folder_mp3s(folder: String) -> Result<Vec<String>, String> {
-    let pattern = format!(
-        "{}/**/*.mp3",
-        folder.trim_end_matches('/').trim_end_matches('\\')
-    );
-    let files: Vec<String> = glob::glob(&pattern)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .map(|p| p.to_string_lossy().to_string())
-        .collect();
+pub async fn scan_folder_videos(folder: String) -> Result<Vec<String>, String> {
+    let base = folder.trim_end_matches('/').trim_end_matches('\\');
+    let mut files: Vec<String> = Vec::new();
+    for ext in VIDEO_EXTENSIONS {
+        let pattern = format!("{}/**/*.{}", base, ext);
+        if let Ok(paths) = glob::glob(&pattern) {
+            for entry in paths.filter_map(|e| e.ok()) {
+                files.push(entry.to_string_lossy().to_string());
+            }
+        }
+    }
     Ok(files)
 }

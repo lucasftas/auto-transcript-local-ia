@@ -5,6 +5,7 @@ use crate::sona::SonaEvent;
 use crate::types::{Segment, Transcript};
 use crate::utils::{get_current_dir, LogError};
 use eyre::{bail, Context, ContextCompat, Result};
+use std::path::Path;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -199,6 +200,71 @@ impl Default for FfmpegOptions {
     }
 }
 
+/// Check if a file is a cloud placeholder (Google Drive / OneDrive Files On-Demand).
+/// On Windows, these files have special attributes that indicate the content
+/// is not available locally and will be downloaded on access.
+#[cfg(target_os = "windows")]
+fn is_cloud_placeholder(path: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let attrs = unsafe { windows::Win32::Storage::FileSystem::GetFileAttributesW(
+        windows::core::PCWSTR(wide.as_ptr()),
+    ) };
+    if attrs == u32::MAX {
+        return false;
+    }
+    const RECALL_ON_DATA_ACCESS: u32 = 0x00400000;
+    const RECALL_ON_OPEN: u32 = 0x00040000;
+    (attrs & (RECALL_ON_DATA_ACCESS | RECALL_ON_OPEN)) != 0
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_cloud_placeholder(_path: &Path) -> bool {
+    false
+}
+
+/// Ensure a cloud placeholder file is fully downloaded before use.
+/// Opens the file to trigger hydration and waits until the placeholder
+/// attributes are removed (up to 10 minutes).
+async fn ensure_file_available(app_handle: &AppHandle, path: &Path) -> Result<()> {
+    if !is_cloud_placeholder(path) {
+        return Ok(());
+    }
+
+    let path_str = path.to_string_lossy().to_string();
+    tracing::info!("Cloud placeholder detected, forcing download: {}", path_str);
+
+    // Emit event so frontend can show "Downloading..." status
+    let _ = app_handle.emit("cloud_file_downloading", &path_str);
+
+    // Opening and reading the file triggers the cloud provider to download it
+    {
+        let file = std::fs::File::open(path)
+            .context(format!("Failed to open cloud file for hydration: {}", path_str))?;
+        use std::io::Read;
+        let mut buf = [0u8; 4096];
+        let mut reader = std::io::BufReader::new(&file);
+        let _ = reader.read(&mut buf);
+    }
+
+    // Wait until the placeholder attribute is removed (max 10 minutes)
+    let mut attempts = 0;
+    let max_attempts = 1200; // 10 min at 500ms intervals
+    while is_cloud_placeholder(path) && attempts < max_attempts {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        attempts += 1;
+    }
+
+    if is_cloud_placeholder(path) {
+        let _ = app_handle.emit("cloud_file_download_failed", &path_str);
+        bail!("Timeout aguardando download do arquivo na nuvem: {}", path_str);
+    }
+
+    let _ = app_handle.emit("cloud_file_downloaded", &path_str);
+    tracing::info!("Cloud file downloaded successfully: {}", path_str);
+    Ok(())
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TranscribeOptions {
     pub path: String,
@@ -344,6 +410,9 @@ pub async fn transcribe(
     if !audio_path.is_file() {
         bail!("Path is not a file: {}", options.path);
     }
+
+    // Ensure cloud placeholder files (Google Drive / OneDrive) are fully downloaded
+    ensure_file_available(&app_handle, &audio_path).await?;
 
     let state = sona_state.lock().await;
     let process = state.process.as_ref();

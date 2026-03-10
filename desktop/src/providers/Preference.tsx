@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext } from 'react'
+import { ReactNode, createContext, useContext, useEffect } from 'react'
 import { useLocalStorage } from 'usehooks-ts'
 import { ModifyState } from '~/lib/utils'
 
@@ -43,14 +43,14 @@ const defaultModelOptions: ModelOptions = {
 	init_prompt: '',
 	verbose: false,
 	lang: 'pt',
-	n_threads: 4,
-	temperature: 0.4,
+	n_threads: 8,
+	temperature: 0.0,
 	max_text_ctx: undefined,
 	word_timestamps: false,
 	max_sentence_len: 1,
 	sampling_strategy: 'beam search',
-	best_of: 5,
-	beam_size: 5,
+	best_of: 8,
+	beam_size: 8,
 }
 
 export function PreferenceProvider({ children }: { children: ReactNode }) {
@@ -60,6 +60,19 @@ export function PreferenceProvider({ children }: { children: ReactNode }) {
 	const [skippedSetup, setSkippedSetup] = useLocalStorage<boolean>('prefs_skipped_setup', false)
 	const [defaultSourceFolder, setDefaultSourceFolder] = useLocalStorage<string | null>('prefs_default_source_folder', null)
 	const [defaultOutputFolder, setDefaultOutputFolder] = useLocalStorage<string | null>('prefs_default_output_folder', null)
+
+	// Migrate old defaults (beam_size=5, n_threads=4) to new optimized values
+	useEffect(() => {
+		if (modelOptions.beam_size === 5 && modelOptions.n_threads === 4) {
+			setModelOptions(prev => ({
+				...prev,
+				beam_size: 8,
+				best_of: 8,
+				n_threads: 8,
+				temperature: 0.0,
+			}))
+		}
+	}, [])
 
 	function resetOptions() {
 		setModelOptions(defaultModelOptions)

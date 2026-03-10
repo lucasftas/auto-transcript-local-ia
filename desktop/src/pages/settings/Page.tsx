@@ -239,17 +239,73 @@ export default function SettingsPage({ setVisible }: SettingsPageProps) {
 					</div>
 				</Card>
 
+				{/* PERFORMANCE */}
+				<SectionHeader>Performance</SectionHeader>
+				<Card>
+					<CardRow>
+						<div>
+							<Label style={{ color: C.text, fontWeight: 500, fontSize: 12 }}>Beam search (qualidade)</Label>
+							<div style={{ fontSize: 10, color: C.textFaint, marginTop: 2 }}>Mais beams = mais uso de GPU e melhor precisão</div>
+						</div>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
+							<input
+								type="range" min={1} max={10} step={1}
+								value={vm.preference.modelOptions.beam_size ?? 8}
+								onChange={(e) => vm.preference.setModelOptions(prev => ({ ...prev, beam_size: parseInt(e.target.value) }))}
+								style={{ flex: 1 }}
+							/>
+							<span style={{ fontSize: 12, color: C.text, minWidth: 18, textAlign: 'center', fontFamily: 'monospace' }}>
+								{vm.preference.modelOptions.beam_size ?? 8}
+							</span>
+						</div>
+					</CardRow>
+					<CardRow>
+						<div>
+							<Label style={{ color: C.text, fontWeight: 500, fontSize: 12 }}>Threads de CPU</Label>
+							<div style={{ fontSize: 10, color: C.textFaint, marginTop: 2 }}>Mais threads = alimenta a GPU mais rápido</div>
+						</div>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
+							<input
+								type="range" min={1} max={16} step={1}
+								value={vm.preference.modelOptions.n_threads ?? 8}
+								onChange={(e) => vm.preference.setModelOptions(prev => ({ ...prev, n_threads: parseInt(e.target.value) }))}
+								style={{ flex: 1 }}
+							/>
+							<span style={{ fontSize: 12, color: C.text, minWidth: 18, textAlign: 'center', fontFamily: 'monospace' }}>
+								{vm.preference.modelOptions.n_threads ?? 8}
+							</span>
+						</div>
+					</CardRow>
+					<CardRow border={false}>
+						<div>
+							<Label style={{ color: C.text, fontWeight: 500, fontSize: 12 }}>Temperatura</Label>
+							<div style={{ fontSize: 10, color: C.textFaint, marginTop: 2 }}>0.0 = determinístico (recomendado para transcrição)</div>
+						</div>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
+							<input
+								type="range" min={0} max={1} step={0.1}
+								value={vm.preference.modelOptions.temperature ?? 0}
+								onChange={(e) => vm.preference.setModelOptions(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+								style={{ flex: 1 }}
+							/>
+							<span style={{ fontSize: 12, color: C.text, minWidth: 24, textAlign: 'center', fontFamily: 'monospace' }}>
+								{(vm.preference.modelOptions.temperature ?? 0).toFixed(1)}
+							</span>
+						</div>
+					</CardRow>
+				</Card>
+
 				{/* COMO USAR */}
 				<SectionHeader>Como usar</SectionHeader>
 				<Card>
 					<div style={{ padding: '14px 16px' }}>
 						{[
-							['1. Adicionar monitor', 'Clique em "+ Adicionar Monitor" na tela principal. Escolha a pasta de origem (onde ficam os .mp3) e a pasta de saída (onde serão salvos os .txt).'],
+							['1. Adicionar monitor', 'Clique em "+ Adicionar Monitor" na tela principal. Escolha a pasta de vídeos e depois a pasta de saída (ou cancele para salvar ao lado do vídeo em /Transcrição).'],
 							['2. Iniciar monitoramento', 'Clique em "Iniciar monitoramento" no card do monitor. O app ficará observando a pasta em tempo real.'],
-							['3. Arquivos detectados automaticamente', 'Quando um arquivo .mp3 for copiado ou criado na pasta de origem, ele aparece na fila e a transcrição começa automaticamente.'],
-							['4. Executar agora', 'Use "Executar agora" para processar todos os arquivos .mp3 já existentes na pasta sem precisar esperar por novos.'],
+							['3. Arquivos detectados automaticamente', 'Quando um vídeo (.mp4, .mov, .m4v) for copiado ou criado na pasta de origem, ele aparece na fila e a transcrição começa automaticamente.'],
+							['4. Executar agora', 'Use "Escanear pasta agora" para processar todos os vídeos já existentes na pasta sem precisar esperar por novos.'],
 							['5. Pausar e retomar', '"Pausar" interrompe a detecção de novos arquivos, mas não cancela o arquivo em andamento. "Retomar" volta a monitorar.'],
-							['6. Resultado', 'Cada .mp3 gera um .txt com o mesmo nome na pasta de saída, contendo a transcrição completa em texto.'],
+							['6. Resultado', 'Cada vídeo gera um .txt nomeado como [NomeDoVídeo]_[Tamanho].txt, contendo a transcrição completa em texto.'],
 						].map(([title, desc], i) => (
 							<div key={i} style={{ marginBottom: i < 5 ? 14 : 0 }}>
 								<div style={{ fontWeight: 600, fontSize: 12, color: C.text, marginBottom: 3 }}>{title}</div>
