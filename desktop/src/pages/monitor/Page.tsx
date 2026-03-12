@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMonitorViewModel, useTranscriptionLog, WatchPair, PairRuntime, FileStatus } from './viewModel'
-import { Plus, Play, Pause, Square, FolderOpen, ChevronRight, Trash2, RotateCcw, CheckCircle2, AlertCircle, Clock, Loader2, Settings2, ScrollText, SkipForward, X, CloudDownload } from 'lucide-react'
+import { Plus, Play, Pause, Square, FolderOpen, ChevronRight, Trash2, RotateCcw, CheckCircle2, AlertCircle, Clock, Loader2, Settings2, ScrollText, SkipForward, X, CloudDownload, Download, Upload, FileSpreadsheet, RefreshCw, Copy } from 'lucide-react'
 import SettingsModal from '~/components/SettingsModal'
 
 // ─── Design tokens (AME-light) ────────────────────────────────────────────────
@@ -45,7 +45,12 @@ function StatusBadge({ status }: { status: PairRuntime['status'] }) {
 }
 
 // ─── Linha de arquivo ─────────────────────────────────────────────────────────
-function FileRow({ file, formatSize }: { file: { path: string; name: string; size: number; status: FileStatus; progress?: number; outputPath?: string; errorMessage?: string }; formatSize: (n: number) => string }) {
+function FileRow({ file, formatSize, onOpenFile, onRetry }: {
+	file: { path: string; name: string; size: number; status: FileStatus; progress?: number; outputPath?: string; errorMessage?: string }
+	formatSize: (n: number) => string
+	onOpenFile: (path: string) => void
+	onRetry?: (path: string) => void
+}) {
 	const iconMap: Record<FileStatus, React.ReactNode> = {
 		queued: <Clock size={12} color={C.gray} />,
 		downloading: <CloudDownload size={12} color={C.blue} style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />,
@@ -66,7 +71,13 @@ function FileRow({ file, formatSize }: { file: { path: string; name: string; siz
 	return (
 		<div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: `1px solid ${C.cardBorder}` }}>
 			<span style={{ flexShrink: 0 }}>{iconMap[file.status]}</span>
-			<span style={{ flex: 1, fontSize: 11, color: colorMap[file.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }} title={file.path}>
+			<span
+				onClick={() => onOpenFile(file.path)}
+				style={{ flex: 1, fontSize: 11, color: colorMap[file.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', cursor: 'pointer', textDecoration: 'none' }}
+				title={`Clique para abrir: ${file.path}`}
+				onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+				onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+			>
 				{file.name}
 			</span>
 			<span style={{ fontSize: 9, color: C.textFaint, flexShrink: 0 }}>{formatSize(file.size)}</span>
@@ -82,19 +93,43 @@ function FileRow({ file, formatSize }: { file: { path: string; name: string; siz
 				</div>
 			)}
 			{file.status === 'done' && file.outputPath && (
-				<span style={{ fontSize: 10, color: C.green, flexShrink: 0, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.outputPath}>
+				<span
+					onClick={() => onOpenFile(file.outputPath!)}
+					style={{ fontSize: 10, color: C.green, flexShrink: 0, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+					title={`Abrir: ${file.outputPath}`}
+					onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+					onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+				>
 					→ {file.outputPath.split(/[/\\]/).pop()}
 				</span>
 			)}
 			{file.status === 'error' && (
-				<span style={{ fontSize: 10, color: C.red, flexShrink: 0, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.errorMessage}>
-					{file.errorMessage?.slice(0, 36)}
-				</span>
+				<>
+					<span style={{ fontSize: 10, color: C.red, flexShrink: 0, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.errorMessage}>
+						{file.errorMessage?.slice(0, 36)}
+					</span>
+					{onRetry && (
+						<button onClick={() => onRetry(file.path)} title="Tentar novamente" style={{
+							background: 'none', border: 'none', cursor: 'pointer', color: C.blue, padding: 0, display: 'flex', alignItems: 'center', flexShrink: 0,
+						}}>
+							<RefreshCw size={11} />
+						</button>
+					)}
+				</>
 			)}
 			{file.status === 'skipped' && (
-				<span style={{ fontSize: 10, color: C.amber, flexShrink: 0 }} title={file.errorMessage}>
-					{file.errorMessage ?? 'Pulado'}
-				</span>
+				<>
+					<span style={{ fontSize: 10, color: C.amber, flexShrink: 0 }} title={file.errorMessage}>
+						{file.errorMessage ?? 'Pulado'}
+					</span>
+					{onRetry && (
+						<button onClick={() => onRetry(file.path)} title="Tentar novamente" style={{
+							background: 'none', border: 'none', cursor: 'pointer', color: C.blue, padding: 0, display: 'flex', alignItems: 'center', flexShrink: 0,
+						}}>
+							<RefreshCw size={11} />
+						</button>
+					)}
+				</>
 			)}
 		</div>
 	)
@@ -122,12 +157,14 @@ function IconBtn({ onClick, icon, title, disabled = false }: {
 }
 
 // ─── Card de monitor ──────────────────────────────────────────────────────────
-function MonitorCard({ pair, runtime, onStart, onStop, onPause, onResume, onRunNow, onRemove, onClearDone, formatSize }: {
+function MonitorCard({ pair, runtime, onStart, onStop, onPause, onResume, onRunNow, onRemove, onClearDone, formatSize, onOpenFile, onRetryFile, onRetryAll, onCopyAndRetry, hasTempFolder }: {
 	pair: WatchPair; runtime: PairRuntime
 	onStart: () => void; onStop: () => void; onPause: () => void; onResume: () => void
 	onRunNow: () => void; onRemove: () => void; onClearDone: () => void; formatSize: (n: number) => string
+	onOpenFile: (path: string) => void; onRetryFile: (path: string) => void; onRetryAll: () => void; onCopyAndRetry: () => void; hasTempFolder: boolean
 }) {
 	const hasDoneOrError = runtime.queue.some((f) => f.status === 'done' || f.status === 'error' || f.status === 'skipped')
+	const hasErrors = runtime.queue.some((f) => f.status === 'error' || f.status === 'skipped')
 	const queuedCount = runtime.queue.filter((f) => f.status === 'queued').length
 	const downloadingCount = runtime.queue.filter((f) => f.status === 'downloading').length
 	const transcribingCount = runtime.queue.filter((f) => f.status === 'transcribing').length
@@ -163,6 +200,12 @@ function MonitorCard({ pair, runtime, onStart, onStop, onPause, onResume, onRunN
 						<IconBtn onClick={onStop} icon={<Square size={12} />} title="Parar monitoramento" />
 					)}
 					<IconBtn onClick={onRunNow} icon={<RotateCcw size={12} />} title="Escanear pasta agora" disabled={runtime.isTranscribing} />
+					{hasErrors && (
+						<IconBtn onClick={onRetryAll} icon={<RefreshCw size={12} />} title="Tentar novamente todos com erro" />
+					)}
+					{hasErrors && hasTempFolder && (
+						<IconBtn onClick={onCopyAndRetry} icon={<Copy size={12} />} title="Copiar local & retry" />
+					)}
 					{hasDoneOrError && (
 						<IconBtn onClick={onClearDone} icon={<Trash2 size={12} />} title="Limpar concluídos" />
 					)}
@@ -203,7 +246,7 @@ function MonitorCard({ pair, runtime, onStart, onStop, onPause, onResume, onRunN
 			{runtime.queue.length > 0 && (
 				<div style={{ maxHeight: 220, overflowY: 'auto', padding: '4px 12px' }}>
 					{runtime.queue.map((file, i) => (
-						<FileRow key={`${file.path}-${i}`} file={file} formatSize={formatSize} />
+						<FileRow key={`${file.path}-${i}`} file={file} formatSize={formatSize} onOpenFile={onOpenFile} onRetry={onRetryFile} />
 					))}
 				</div>
 			)}
@@ -296,6 +339,7 @@ export default function MonitorPage() {
 	const vm = useMonitorViewModel()
 	const [settingsVisible, setSettingsVisible] = useState(false)
 	const [logVisible, setLogVisible] = useState(false)
+	const [importErrors, setImportErrors] = useState<Array<{ row_number: number; column: string; message: string }> | null>(null)
 
 	return (
 		<div style={{
@@ -319,6 +363,40 @@ export default function MonitorPage() {
 
 			{settingsVisible && <SettingsModal visible={settingsVisible} setVisible={setSettingsVisible} />}
 			{logVisible && <LogPanel onClose={() => setLogVisible(false)} />}
+			{importErrors && (
+				<div style={{
+					position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+					background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', justifyContent: 'center', alignItems: 'center',
+				}} onClick={() => setImportErrors(null)}>
+					<div style={{
+						background: C.cardBg, borderRadius: 8, width: '90%', maxWidth: 600, maxHeight: '70vh',
+						display: 'flex', flexDirection: 'column', overflow: 'hidden',
+					}} onClick={(e) => e.stopPropagation()}>
+						<div style={{
+							padding: '10px 16px', borderBottom: `1px solid ${C.cardBorder}`,
+							display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.cardHeaderBg,
+						}}>
+							<span style={{ fontSize: 13, fontWeight: 700, color: C.red }}>Erros na importação</span>
+							<button onClick={() => setImportErrors(null)} style={{
+								width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+								borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: C.textDim,
+							}}><X size={14} /></button>
+						</div>
+						<div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
+							{importErrors.map((err, i) => (
+								<div key={i} style={{
+									padding: '6px 0', borderBottom: `1px solid ${C.cardBorder}`,
+									fontSize: 11, display: 'flex', gap: 10,
+								}}>
+									<span style={{ color: C.textFaint, flexShrink: 0, fontFamily: 'monospace' }}>Linha {err.row_number}</span>
+									<span style={{ color: C.amber, flexShrink: 0, fontWeight: 600 }}>{err.column}</span>
+									<span style={{ color: C.red, flex: 1 }}>{err.message}</span>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Header bar */}
 			<div style={{
@@ -328,6 +406,30 @@ export default function MonitorPage() {
 			}}>
 				<span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.01em' }}>AutoScript</span>
 				<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+					<button onClick={vm.exportQueue} title="Exportar fila (CSV)" style={{
+						width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+						borderRadius: 4, border: '1px solid #3a3a3a', background: 'transparent',
+						color: C.headerText, cursor: 'pointer',
+					}}>
+						<Download size={14} />
+					</button>
+					<button onClick={async () => {
+						const result = await vm.importFromExcel()
+						if (result && result.errors.length > 0) setImportErrors(result.errors)
+					}} title="Importar monitores (Excel)" style={{
+						width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+						borderRadius: 4, border: '1px solid #3a3a3a', background: 'transparent',
+						color: C.headerText, cursor: 'pointer',
+					}}>
+						<Upload size={14} />
+					</button>
+					<button onClick={vm.downloadExcelTemplate} title="Baixar template Excel" style={{
+						width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+						borderRadius: 4, border: '1px solid #3a3a3a', background: 'transparent',
+						color: C.headerText, cursor: 'pointer',
+					}}>
+						<FileSpreadsheet size={14} />
+					</button>
 					<button onClick={() => setLogVisible(true)} title="Log de Transcrições" style={{
 						width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
 						borderRadius: 4, border: '1px solid #3a3a3a', background: 'transparent',
@@ -384,6 +486,11 @@ export default function MonitorPage() {
 							onRemove={() => vm.removePair(pair.id)}
 							onClearDone={() => vm.clearDone(pair.id)}
 							formatSize={vm.formatSize}
+							onOpenFile={vm.openFileInExplorer}
+							onRetryFile={(path) => vm.retryFile(pair.id, path)}
+							onRetryAll={() => vm.retryAllErrors(pair.id)}
+							onCopyAndRetry={() => vm.retryWithLocalCopy(pair.id)}
+							hasTempFolder={!!vm.hasTempFolder}
 						/>
 					)
 				})}

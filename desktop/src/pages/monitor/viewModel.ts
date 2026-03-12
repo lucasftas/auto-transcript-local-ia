@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import * as fs from '@tauri-apps/plugin-fs'
 import { basename, extname, join, dirname } from '@tauri-apps/api/path'
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -577,9 +577,207 @@ export function useMonitorViewModel() {
 		}
 	}
 
+	// ─── Feature 1: Open file in Explorer ────────────────────────────────────────
+	async function openFileInExplorer(path: string) {
+		try {
+			await invoke('open_path', { path })
+		} catch (e) {
+			toast.error(`Erro ao abrir caminho: ${e}`)
+		}
+	}
+
+	// ─── Feature 1: Export queue as CSV ──────────────────────────────────────────
+	async function exportQueue() {
+		const lines: string[] = ['status,nome,caminho,tamanho,saida,erro']
+		for (const pair of pairsRef.current) {
+			const rt = runtimesRef.current[pair.id]
+			if (!rt) continue
+			for (const f of rt.queue) {
+				const status = f.status
+				const name = f.name.replace(/,/g, ';')
+				const path = f.path.replace(/,/g, ';')
+				const size = String(f.size)
+				const output = (f.outputPath ?? '').replace(/,/g, ';')
+				const error = (f.errorMessage ?? '').replace(/,/g, ';')
+				lines.push(`${status},${name},${path},${size},${output},${error}`)
+			}
+		}
+		if (lines.length <= 1) {
+			toast.info('Nenhum arquivo na fila para exportar.')
+			return
+		}
+		const savePath = await saveDialog({
+			title: 'Salvar fila como CSV',
+			defaultPath: 'fila_transcricao.csv',
+			filters: [{ name: 'CSV', extensions: ['csv'] }],
+		})
+		if (!savePath) return
+		try {
+			await fs.writeTextFile(savePath, lines.join('\n'))
+			toast.success(`Fila exportada: ${savePath}`)
+		} catch (e) {
+			toast.error(`Erro ao salvar CSV: ${e}`)
+		}
+	}
+
+	// ─── Feature 2: Retry file ──────────────────────────────────────────────────
+	function retryFile(pairId: string, filePath: string) {
+		setRuntimes((prev) => {
+			const rt = prev[pairId]
+			if (!rt) return prev
+			const updatedQueue = rt.queue.map((f) =>
+				f.path === filePath && (f.status === 'error' || f.status === 'skipped')
+					? { ...f, status: 'queued' as FileStatus, errorMessage: undefined, progress: undefined, outputPath: undefined }
+					: f
+			)
+			return { ...prev, [pairId]: { ...rt, queue: updatedQueue } }
+		})
+		setTimeout(() => processQueue(pairId), 100)
+	}
+
+	// ─── Feature 2: Retry all errors/skipped in a pair ──────────────────────────
+	function retryAllErrors(pairId: string) {
+		setRuntimes((prev) => {
+			const rt = prev[pairId]
+			if (!rt) return prev
+			const updatedQueue = rt.queue.map((f) =>
+				(f.status === 'error' || f.status === 'skipped')
+					? { ...f, status: 'queued' as FileStatus, errorMessage: undefined, progress: undefined, outputPath: undefined }
+					: f
+			)
+			return { ...prev, [pairId]: { ...rt, queue: updatedQueue } }
+		})
+		setTimeout(() => processQueue(pairId), 100)
+	}
+
+	// ─── Feature 2: Copy locally & retry ────────────────────────────────────────
+	async function retryWithLocalCopy(pairId: string) {
+		const tempFolder = preference.tempCopyFolder
+		if (!tempFolder) {
+			toast.error('Configure a pasta temporária de cópia nas Configurações antes de usar esta função.')
+			return
+		}
+		const rt = runtimesRef.current[pairId]
+		if (!rt) return
+
+		const errorFiles = rt.queue.filter(f => f.status === 'error' || f.status === 'skipped')
+		if (errorFiles.length === 0) {
+			toast.info('Nenhum arquivo com erro/pulado para copiar.')
+			return
+		}
+
+		const BATCH_SIZE = 10
+		const batches: string[][] = []
+		for (let i = 0; i < errorFiles.length; i += BATCH_SIZE) {
+			batches.push(errorFiles.slice(i, i + BATCH_SIZE).map(f => f.path))
+		}
+
+		let totalCopied = 0
+		for (const batch of batches) {
+			try {
+				const results: Array<{ source: string; local_path: string; success: boolean; error: string | null }> =
+					await invoke('copy_files_native', { sources: batch, destination: tempFolder })
+
+				for (const r of results) {
+					if (r.success && r.local_path) {
+						// Update file path to local copy and re-queue
+						setRuntimes((prev) => {
+							const cur = prev[pairId]
+							if (!cur) return prev
+							const updatedQueue = cur.queue.map((f) =>
+								f.path === r.source
+									? { ...f, path: r.local_path, status: 'queued' as FileStatus, errorMessage: undefined, progress: undefined, outputPath: undefined }
+									: f
+							)
+							return { ...prev, [pairId]: { ...cur, queue: updatedQueue } }
+						})
+						totalCopied++
+					} else {
+						toast.error(`Falha ao copiar ${r.source.split(/[/\\]/).pop()}: ${r.error}`)
+					}
+				}
+			} catch (e) {
+				toast.error(`Erro na cópia nativa: ${e}`)
+			}
+		}
+
+		if (totalCopied > 0) {
+			toast.success(`${totalCopied} arquivo(s) copiado(s) localmente. Retomando transcrição...`)
+			setTimeout(() => processQueue(pairId), 200)
+		}
+	}
+
+	// ─── Feature 3: Import monitors from Excel ─────────────────────────────────
+	async function downloadExcelTemplate() {
+		const savePath = await saveDialog({
+			title: 'Salvar template Excel',
+			defaultPath: 'template_monitores.xlsx',
+			filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+		})
+		if (!savePath) return
+		try {
+			await invoke('generate_template_xlsx', { outputPath: savePath })
+			toast.success(`Template salvo: ${savePath}`)
+			await invoke('open_path', { path: savePath })
+		} catch (e) {
+			toast.error(`Erro ao gerar template: ${e}`)
+		}
+	}
+
+	async function importFromExcel(): Promise<{ imported: number; errors: Array<{ row_number: number; column: string; message: string }> } | null> {
+		const filePath = await openDialog({
+			title: 'Selecione o arquivo Excel (.xlsx)',
+			multiple: false,
+			filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+		})
+		if (!filePath) return null
+
+		try {
+			const result: {
+				imported: Array<{ source_folder: string; output_mode: string; output_folder: string; label: string; timeout_minutes: number }>
+				errors: Array<{ row_number: number; column: string; message: string }>
+			} = await invoke('import_monitors_xlsx', { filePath })
+
+			// Create pairs for imported rows
+			for (const row of result.imported) {
+				const id = generateId()
+				const newPair: WatchPair = {
+					id,
+					sourceFolder: row.source_folder,
+					outputMode: row.output_mode as OutputMode,
+					outputFolder: row.output_folder,
+					label: row.label,
+					durationMinutes: null,
+					timeoutMinutes: row.timeout_minutes,
+				}
+				setPairs((prev) => [...prev, newPair])
+				setRuntimes((prev) => ({
+					...prev,
+					[id]: { status: 'idle', queue: [], isTranscribing: false, totalDone: 0, totalError: 0, totalSkipped: 0, timerEndsAt: null, timeRemainingSeconds: null },
+				}))
+			}
+
+			if (result.imported.length > 0) {
+				toast.success(`${result.imported.length} monitor(es) importado(s) com sucesso!`)
+			}
+			if (result.errors.length > 0) {
+				toast.error(`${result.errors.length} linha(s) com erro na importação.`)
+			}
+
+			return { imported: result.imported.length, errors: result.errors }
+		} catch (e) {
+			toast.error(`Erro ao importar Excel: ${e}`)
+			return null
+		}
+	}
+
 	return {
 		pairs, addPair, removePair, setDuration, setTimeout_minutes,
 		startWatching, stopWatching, pauseWatching, resumeWatching,
 		runNow, clearDone, getRuntime, formatSize,
+		openFileInExplorer, exportQueue,
+		retryFile, retryAllErrors, retryWithLocalCopy,
+		downloadExcelTemplate, importFromExcel,
+		hasTempFolder: !!preference.tempCopyFolder,
 	}
 }

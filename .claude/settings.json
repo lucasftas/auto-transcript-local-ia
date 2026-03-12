@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"backslash\\\\|UNC\\\\|\\\\\\\\\\\\\\\\\\\\|drive letter\" \"/c/Users/Lucas/Videos/auto-transcript-local-ia\" --include=\"*.rs\" --include=\"*.ts\")"
+    ]
+  }
+}

@@ -122,6 +122,15 @@ export function viewModel() {
 		preference.setDefaultOutputFolder(null)
 	}
 
+	async function changeTempCopyFolder() {
+		const path = await open({ directory: true, multiple: false })
+		if (path) preference.setTempCopyFolder(path)
+	}
+
+	function clearTempCopyFolder() {
+		preference.setTempCopyFolder(null)
+	}
+
 	async function onWindowFocus() {
 		listenersRef.current.push(await listen('tauri://focus', loadModels))
 	}
@@ -170,5 +179,7 @@ export function viewModel() {
 		clearDefaultSourceFolder,
 		changeDefaultOutputFolder,
 		clearDefaultOutputFolder,
+		changeTempCopyFolder,
+		clearTempCopyFolder,
 	}
 }

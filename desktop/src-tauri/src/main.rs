@@ -125,7 +125,10 @@ async fn main() -> Result<()> {
             cmd::watcher::stop_watch_folder,
             cmd::watcher::pause_watch_folder,
             cmd::watcher::resume_watch_folder,
-            cmd::watcher::scan_folder_videos
+            cmd::watcher::scan_folder_videos,
+            cmd::excel::generate_template_xlsx,
+            cmd::excel::import_monitors_xlsx,
+            cmd::file_copy::copy_files_native
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

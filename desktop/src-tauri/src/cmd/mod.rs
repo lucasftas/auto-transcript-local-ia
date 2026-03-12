@@ -22,8 +22,10 @@ use tauri::{AppHandle, Emitter, Listener, State};
 use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
 pub mod audio;
-pub mod ytdlp;
+pub mod excel;
+pub mod file_copy;
 pub mod watcher;
+pub mod ytdlp;
 
 /// Return true if there's internet connection
 /// timeout in ms

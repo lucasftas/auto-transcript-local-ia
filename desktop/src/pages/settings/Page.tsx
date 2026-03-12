@@ -239,6 +239,34 @@ export default function SettingsPage({ setVisible }: SettingsPageProps) {
 					</div>
 				</Card>
 
+				{/* PASTA TEMPORÁRIA DE CÓPIA */}
+				<SectionHeader>Cópia local (retry)</SectionHeader>
+				<Card>
+					<div style={{ padding: '10px 14px' }}>
+						<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+							<span style={{ fontWeight: 500, fontSize: 12 }}>Pasta temporária de cópia</span>
+							<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+								{vm.preference.tempCopyFolder && (
+									<button onClick={vm.clearTempCopyFolder} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, fontSize: 11 }}>limpar</button>
+								)}
+								<button onClick={vm.changeTempCopyFolder} style={{
+									display: 'flex', alignItems: 'center', gap: 4, background: '#f0f0f0',
+									border: `1px solid ${C.cardBorder}`, borderRadius: 4, cursor: 'pointer',
+									color: C.text, fontSize: 12, padding: '3px 8px',
+								}}>
+									<Folder size={12} /> Escolher
+								</button>
+							</div>
+						</div>
+						<div style={{ fontFamily: 'monospace', fontSize: 11, color: C.textFaint, minHeight: 18 }}>
+							{vm.preference.tempCopyFolder ?? 'Não definido — necessário para "Copiar local & retry"'}
+						</div>
+						<div style={{ fontSize: 10, color: C.textFaint, marginTop: 4 }}>
+							Arquivos com erro serão copiados para cá antes de transcrever novamente. Útil para arquivos do Google Drive/OneDrive.
+						</div>
+					</div>
+				</Card>
+
 				{/* PERFORMANCE */}
 				<SectionHeader>Performance</SectionHeader>
 				<Card>

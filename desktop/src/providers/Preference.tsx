@@ -30,6 +30,8 @@ export interface Preference {
 	setDefaultSourceFolder: ModifyState<string | null>
 	defaultOutputFolder: string | null
 	setDefaultOutputFolder: ModifyState<string | null>
+	tempCopyFolder: string | null
+	setTempCopyFolder: ModifyState<string | null>
 	resetOptions: () => void
 }
 
@@ -60,6 +62,7 @@ export function PreferenceProvider({ children }: { children: ReactNode }) {
 	const [skippedSetup, setSkippedSetup] = useLocalStorage<boolean>('prefs_skipped_setup', false)
 	const [defaultSourceFolder, setDefaultSourceFolder] = useLocalStorage<string | null>('prefs_default_source_folder', null)
 	const [defaultOutputFolder, setDefaultOutputFolder] = useLocalStorage<string | null>('prefs_default_output_folder', null)
+	const [tempCopyFolder, setTempCopyFolder] = useLocalStorage<string | null>('prefs_temp_copy_folder', null)
 
 	// Migrate old defaults (beam_size=5, n_threads=4) to new optimized values
 	useEffect(() => {
@@ -91,6 +94,8 @@ export function PreferenceProvider({ children }: { children: ReactNode }) {
 		setDefaultSourceFolder,
 		defaultOutputFolder,
 		setDefaultOutputFolder,
+		tempCopyFolder,
+		setTempCopyFolder,
 		resetOptions,
 	}
 
